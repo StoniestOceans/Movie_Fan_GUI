@@ -81,6 +81,51 @@ class ThesysMockAdapter:
             ]
         }
 
+    @staticmethod
+    def _create_mindmap(center_node: str, related_nodes: List[Dict[str, str]]) -> Dict[str, Any]:
+        """
+        Creates a visual Node Graph (Mindmap) component.
+        """
+        # We simulate a graph using a central Card and surrounding "satellite" cards
+        # In a real Thesys UI this would be a specific <GraphView> component
+        
+        satellites = []
+        for node in related_nodes:
+            satellites.append({
+                "type": "div",
+                "props": {"className": "flex flex-col items-center p-2 bg-gray-800 border border-purple-500 rounded-lg min-w-[100px]"},
+                "children": [
+                    {"type": "p", "props": {"className": "text-xs text-purple-300 mb-1"}, "children": [node['relation']]},
+                    {"type": "p", "props": {"className": "text-sm font-bold text-white"}, "children": [node['label']]}
+                ]
+            })
+
+        return {
+            "type": "div",
+            "props": {"className": "flex flex-col items-center space-y-4 w-full p-4 bg-gray-900/50 rounded-xl border border-gray-700"},
+            "children": [
+                # Title
+                {"type": "h3", "props": {"className": "text-lg text-gray-400 uppercase tracking-widest"}, "children": ["Knowledge Graph"]},
+                
+                # Graph Container
+                {
+                    "type": "div", 
+                    "props": {"className": "flex flex-wrap justify-center gap-6 items-center"},
+                    "children": [
+                         # Center Node
+                        {
+                            "type": "div",
+                            "props": {"className": "p-6 bg-purple-900/40 border-2 border-purple-400 rounded-full shadow-[0_0_15px_rgba(168,85,247,0.5)] z-10"},
+                            "children": [{"type": "h4", "props": {"className": "text-xl font-bold text-white"}, "children": [center_node]}]
+                        },
+                        
+                        # Satellites
+                        *satellites
+                    ]
+                }
+            ]
+        }
+
     def adapt_response(self, agent_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Main entry point. Takes raw agent data and returns a UI Schema.
@@ -100,6 +145,12 @@ class ThesysMockAdapter:
             # Or check fanart data if available in future
             
             ui_schema.append(self._create_card(title, subtitle, content, image_url=image))
+        
+        elif agent_type == "mindmap":
+            # Knowledge Graph / Mindmap
+            center = data.get("center", "Unknown")
+            relations = data.get("relations", [])
+            ui_schema.append(self._create_mindmap(center, relations))
             
         elif agent_type == "commerce":
             # Receipt

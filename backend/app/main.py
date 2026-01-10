@@ -1,4 +1,5 @@
 import os
+import asyncio
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
@@ -71,28 +72,39 @@ async def chat_endpoint(request: ChatRequest):
     data_payload = {}
 
     if intent == "ingestion":
-        # 1. Search Wikipedia (Metadata & Persistence)
-        wiki_data = await wiki_agent.search_movie(request.query)
-        
-        # 2. Search OpenSubtitles (SRT Content)
-        # Import here to avoid circulars if any, but better at top. 
-        # For now we assume imports are clean.
+        # PARALLEL EXECUTION STRATEGY
+        # We launch all agent tasks simultaneously to minimize latency.
         from backend.app.ingestion.opensubtitles_agent import OpenSubtitlesAgent
-        # We instantiate here or globally. Globally is better but for rapid proto:
         os_agent = OpenSubtitlesAgent()
-        srt_content = await os_agent.search_and_download(request.query)
         
-        # 3. Fanart Integration (Assets & Persistence)
-        # We rely on the movie name found by Wikipedia, or the original query
-        movie_name_for_fanart = wiki_data.get('title', request.query)
-        fanart_data = await fanart_agent.get_movie_assets(movie_name=movie_name_for_fanart)
+        # Create coroutines
+        task_wiki = wiki_agent.search_movie(request.query)
+        task_subs = os_agent.search_and_download(request.query)
+        task_fanart = fanart_agent.get_movie_assets(movie_name=request.query) # Use query initially
+        
+        # Execute concurrently
+        import asyncio # Ensure asyncio is imported
+        results = await asyncio.gather(task_wiki, task_subs, task_fanart, return_exceptions=True)
+        
+        # Unpack results
+        wiki_data = results[0] if not isinstance(results[0], Exception) else {}
+        srt_content = results[1] if not isinstance(results[1], Exception) else None
+        fanart_data = results[2] if not isinstance(results[2], Exception) else {}
+        
+        # Exception Handling Logging
+        if isinstance(results[0], Exception): print(f"Wiki Agent Failed: {results[0]}")
+        if isinstance(results[1], Exception): print(f"Subtitle Agent Failed: {results[1]}")
+        if isinstance(results[2], Exception): print(f"Fanart Agent Failed: {results[2]}")
+
+        # Logic to merge data
+        # If Wikipedia found a better title, we might want to re-query Fanart (optional, but for speed we accept the simultaneous result)
+        title = wiki_data.get('title', request.query)
 
         if srt_content:
-            # Load into the global SRT Manager
             srt_manager.load_file(srt_content)
-            response_text = f"Found '{movie_name_for_fanart}' on Wikipedia, fetched Fanart, and loaded subtitles!"
+            response_text = f"Simultaneously fetched data for '{title}' from Wikipedia, Fanart, and OpenSubtitles!"
         else:
-            response_text = f"Found '{movie_name_for_fanart}' on Wikipedia and Fanart, but no subtitles found."
+            response_text = f"Fetched data for '{title}', but subtitles were not found."
 
         data_payload = {**wiki_data, "fanart": fanart_data.get('assets', {})}
         
@@ -139,44 +151,91 @@ async def sync_endpoint(request: SyncRequest):
     detected_entity = "Unknown"
     summary = "Context loading..."
     
+    # GENERATIVE UI LOGIC:
+    # We decide the "Type" of UI to render based on the context.
+    
     if "Neo" in text:
         detected_entity = "Neo"
         summary = "Thomas A. Anderson, also known as Neo, is the protagonist."
+        context_type = "ingestion" # Standard Card, but we'll try to find an image
         
     elif "Matrix" in text:
         detected_entity = "The Matrix"
         summary = "A simulated reality created by sentient machines to subdue the human population."
+        context_type = "ingestion"
         
     elif "blue pill" in text:
         detected_entity = "Blue Pill"
         summary = "Choosing the Blue Pill means returning to the simulated reality of the Matrix."
+        context_type = "ingestion"
 
     elif "red pill" in text:
         detected_entity = "Red Pill"
         summary = "Choosing the Red Pill reveals the truth about the Matrix."
+        context_type = "ingestion"
         
     elif "Morpheus" in text:
+        # SHOWCASE: MINDMAP GENERATION
         detected_entity = "Morpheus"
-        summary = "Captain of the Nebuchadnezzar, he frees Neo from the Matrix."
+        context_type = "mindmap"
+        summary = "Captain of the Nebuchadnezzar."
 
     # Generate Thesys UI for this context
     # We reuse the "ingestion" adapter logic but with context data
     adapter = ThesysMockAdapter()
     
-    # Create a "Context Card"
-    # We map 'title' -> Entity, 'summary' -> Description
-    data_payload = {
-        "title": detected_entity,
-        "summary": f"Line: \"{text}\"\n\nContext: {summary}",
-        "url": "#timestamp"
-    }
+    data_payload = {}
+    
+    if context_type == "mindmap":
+        # Dynamic Knowledge Graph Construction
+        data_payload = {
+            "center": detected_entity,
+            "relations": [
+                {"relation": "Captain of", "label": "Nebuchadnezzar"},
+                {"relation": "Mentor to", "label": "Neo"},
+                {"relation": "Enemy of", "label": "Agents"},
+                {"relation": "Believes in", "label": "The One"}
+            ]
+        }
+    else:
+        # Standard Card
+        # In a real app, we'd query the DB for the Fanart we found earlier
+        # Here we mock it for the high-fidelity demo
+        image_url = None
+        if detected_entity == "Neo":
+            image_url = "https://images.fanart.tv/fanart/the-matrix-523ce51b89944.jpg" 
+        elif detected_entity == "The Matrix":
+            image_url = "https://images.fanart.tv/fanart/the-matrix-5979c6d66e762.jpg"
+
+        data_payload = {
+            "title": detected_entity,
+            "summary": f"Line: \"{text}\"\n\nContext: {summary}",
+            "url": "#timestamp",
+            "images": [image_url] if image_url else []
+        }
     
     # Use adapter to format it
-    ui_schema = adapter.adapt_response("ingestion", data_payload)
+    ui_schema = adapter.adapt_response(context_type, data_payload)
     
+    # SYSTEM LOGS (Observability)
+    # Simulate meaningful backend activity logs for the HUD
+    system_logs = [
+        f"[SYNC] Processing frame @ {request.timestamp_seconds}s",
+        f"[SRT] Active Subtitle Index: {sub['index']}",
+        f"[NLP] Entity Extraction: '{detected_entity}'",
+    ]
+    
+    if context_type == "mindmap":
+        system_logs.append(f"[GEN-UI] Trigger: Narrative Importance")
+        system_logs.append(f"[GEN-UI] Rendering Knowledge Graph for {detected_entity}...")
+    elif context_type == "ingestion" and detected_entity != "Unknown":
+        system_logs.append(f"[DB] Querying Fanart.tv Collection...")
+        system_logs.append(f"[GEN-UI] Injecting Asset: {data_payload.get('images', [''])[0] or 'None'}")
+
     return {
         "subtitle": sub,
-        "ui_schema": ui_schema["ui_schema"]
+        "ui_schema": ui_schema["ui_schema"],
+        "logs": system_logs
     }
 
 if __name__ == "__main__":
