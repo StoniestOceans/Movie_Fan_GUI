@@ -116,40 +116,13 @@ export default function DashboardInterface() {
                 {/* Left: Simulation / Subtitle View */}
                 <div className="flex-1 p-8 flex flex-col justify-center items-center border-r border-gray-800 bg-black/50 relative">
 
-                    {/* Backend System Monitor HUD */}
-                    <div className="absolute top-4 left-4 p-4 bg-black/80 border border-green-500/30 rounded-lg font-mono text-xs w-80 shadow-lg z-30 pointer-events-none">
-                        <h4 className="text-green-500 mb-2 uppercase tracking-widest border-b border-green-500/30 pb-1">Backend Activity</h4>
-                        <div className="space-y-1">
-                            {systemLogs.length > 0 ? (
-                                systemLogs.map((log, i) => (
-                                    <div key={i} className="truncate text-green-300/80">
-                                        <span className="text-green-500 mr-2">➜</span>{log}
-                                    </div>
-                                ))
-                            ) : (
-                                <div className="text-gray-500 italic">Waiting for sync pulse...</div>
-                            )}
-                        </div>
-                    </div>
+
 
                     <div className="w-full max-w-2xl bg-black aspect-video rounded-xl border border-gray-700 flex flex-col items-center justify-end relative shadow-2xl overflow-hidden pb-12">
                         {/* Fake Video Player Placeholder */}
                         <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent z-0"></div>
 
-                        {/* Karaoke Subtitles */}
-                        <div className="w-full px-8 z-10 flex flex-col items-center space-y-2">
-                            {subtitleHistory.slice(0, -1).map((line, i) => (
-                                <p key={i} className="text-gray-500 text-lg font-medium transition-all duration-300 blur-[1px]">
-                                    {line}
-                                </p>
-                            ))}
-                            {/* Active Line */}
-                            {subtitleHistory.length > 0 && (
-                                <p className="text-white text-2xl font-bold drop-shadow-md scale-105 transition-all duration-100 text-center">
-                                    {subtitleHistory[subtitleHistory.length - 1]}
-                                </p>
-                            )}
-                        </div>
+
 
                         <div className="absolute top-4 right-4 text-xs text-gray-500 z-20">
                             simulation mode
@@ -171,8 +144,23 @@ export default function DashboardInterface() {
             </main>
 
             {/* Bottom: Controls */}
-            <footer className="bg-gray-900 border-t border-gray-800 p-4">
-                <div className="max-w-4xl mx-auto flex items-center gap-4">
+            <footer className="bg-gray-900 border-t border-gray-800 p-4 pb-8 relative">
+                {/* Repositioned Karaoke Subtitles (Above Timeline) */}
+                <div className="absolute bottom-full left-0 w-full pb-4 bg-gradient-to-t from-gray-900 to-transparent pointer-events-none flex flex-col items-center justify-end h-32 z-10">
+                    {subtitleHistory.slice(0, -1).map((line, i) => (
+                        <p key={i} className="text-gray-400/60 text-sm font-medium transition-all duration-300 blur-[0.5px]">
+                            {line}
+                        </p>
+                    ))}
+                    {/* Active Line */}
+                    {subtitleHistory.length > 0 && (
+                        <p className="text-white text-xl font-bold drop-shadow-lg scale-105 transition-all duration-100 text-center mt-1">
+                            {subtitleHistory[subtitleHistory.length - 1]}
+                        </p>
+                    )}
+                </div>
+
+                <div className="max-w-4xl mx-auto flex items-center gap-4 relative z-20">
                     <button
                         onClick={togglePlay}
                         className="w-12 h-12 rounded-full bg-white text-black flex items-center justify-center hover:bg-gray-200 transition"
