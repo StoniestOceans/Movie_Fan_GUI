@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+motor
+pydantic
+python-dotenv
+requests
+fireworks-ai
+wikipedia
+httpx
+# nvidia-nemo # Uncomment to install full NeMo toolkit (heavy)
