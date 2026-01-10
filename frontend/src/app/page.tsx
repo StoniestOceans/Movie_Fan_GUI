@@ -1,9 +1,9 @@
-import ChatInterface from "../components/ChatInterface";
+import DashboardInterface from "../components/DashboardInterface";
 
 export default function Home() {
   return (
-    <main>
-      <ChatInterface />
+    <main className="min-h-screen bg-gray-900">
+      <DashboardInterface />
     </main>
   );
 }

@@ -29,3 +29,5 @@ dist/
 
 # Project specific
 backend/.env
+response.json
+response_fanart.json

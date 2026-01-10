@@ -7,4 +7,5 @@ requests
 fireworks-ai
 wikipedia
 httpx
+pysrt
 # nvidia-nemo # Uncomment to install full NeMo toolkit (heavy)
