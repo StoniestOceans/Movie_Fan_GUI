@@ -9,11 +9,22 @@ export default function DashboardInterface() {
     const [isPlaying, setIsPlaying] = useState(false);
     const [contextData, setContextData] = useState<any>(null);
     const [subtitleText, setSubtitleText] = useState<string>("");
-    const [showChat, setShowChat] = useState(false);
+    // Themes: neutral, action, suspense, emotional
+    const [sceneTheme, setSceneTheme] = useState<string>("neutral");
 
     // Karaoke & Logs State
     const [subtitleHistory, setSubtitleHistory] = useState<string[]>([]);
     const [systemLogs, setSystemLogs] = useState<string[]>([]);
+
+    // Theme Styles Implementation
+    const getThemeStyles = () => {
+        switch (sceneTheme) {
+            case 'action': return 'bg-red-900/20 border-red-500/50 shadow-[0_0_50px_rgba(220,38,38,0.3)]';
+            case 'suspense': return 'bg-indigo-900/20 border-indigo-500/50 shadow-[0_0_50px_rgba(99,102,241,0.3)]';
+            case 'emotional': return 'bg-amber-900/20 border-amber-500/50 shadow-[0_0_50px_rgba(245,158,11,0.3)]';
+            default: return 'bg-black/50 border-gray-700 shadow-2xl';
+        }
+    };
 
     // Polling / Simulation Loop
     useEffect(() => {
@@ -57,6 +68,10 @@ export default function DashboardInterface() {
                 if (data.ui_schema && data.ui_schema.length > 0) {
                     setContextData(data.ui_schema);
                 }
+
+                if (data.theme) {
+                    setSceneTheme(data.theme);
+                }
             } catch (err) {
                 console.error("Sync error:", err);
             }
@@ -85,62 +100,41 @@ export default function DashboardInterface() {
                     <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-400 to-blue-500">
                         Movie Fan Context Deck
                     </h1>
-                    <button
-                        onClick={() => setShowChat(!showChat)}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors"
-                    >
-                        {showChat ? 'Close Chat' : 'Open Chat'}
-                    </button>
                 </div>
                 <div className="text-sm text-gray-400">
-                    Now Playing: <span className="text-white">The Matrix</span>
+                    Now Playing: <span className="text-white">Avengers: Infinity War</span>
                 </div>
             </header>
 
-            {/* Chat Overlay */}
-            {showChat && (
-                <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-                    <div className="bg-gray-900 w-full max-w-2xl h-[80vh] rounded-2xl shadow-2xl overflow-hidden border border-gray-700 relative">
-                        <button
-                            onClick={() => setShowChat(false)}
-                            className="absolute top-4 right-4 text-gray-400 hover:text-white"
-                        >
-                            ✕
-                        </button>
-                        <ChatInterface />
-                    </div>
-                </div>
-            )}
+            <main className="flex-1 overflow-hidden flex flex-row relative">
+                {/* Main Stage: Context Canvas / Simulation View */}
+                <div className="flex-1 p-8 flex flex-col justify-center items-center bg-black/50 relative border-r border-gray-800 transition-colors duration-1000">
 
-            <main className="flex-1 overflow-hidden flex flex-col md:flex-row">
-                {/* Left: Simulation / Subtitle View */}
-                <div className="flex-1 p-8 flex flex-col justify-center items-center border-r border-gray-800 bg-black/50 relative">
+                    <div className={`w-full max-w-4xl aspect-video rounded-xl border flex flex-col items-center justify-center relative overflow-hidden pb-12 transition-all duration-1000 ${getThemeStyles()}`}>
+                        {/* Fake Video Player Placeholder / Ambient Background */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black z-0 opacity-50"></div>
 
-
-
-                    <div className="w-full max-w-2xl bg-black aspect-video rounded-xl border border-gray-700 flex flex-col items-center justify-end relative shadow-2xl overflow-hidden pb-12">
-                        {/* Fake Video Player Placeholder */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent z-0"></div>
-
-
-
-                        <div className="absolute top-4 right-4 text-xs text-gray-500 z-20">
-                            simulation mode
+                        {/* MAIN STAGE: Generative UI Canvas */}
+                        <div className="absolute inset-0 z-10 flex items-center justify-center p-12 pointer-events-none">
+                            {contextData ? (
+                                <div className="scale-110 transition-transform duration-700 ease-out opacity-100 w-full flex justify-center">
+                                    <ThesysRenderer schema={contextData} />
+                                </div>
+                            ) : (
+                                <div className="text-gray-800 text-6xl font-bold opacity-20 select-none">
+                                    NO SIGNAL
+                                </div>
+                            )}
                         </div>
+
+
                     </div>
                 </div>
 
-                {/* Right: Dynamic Context (Thesys) */}
-                <div className="w-full md:w-1/3 p-6 bg-gray-800/30 overflow-y-auto">
-                    <h2 className="text-sm uppercase tracking-wider text-gray-500 mb-4 font-semibold">Live Context</h2>
-                    <div className="space-y-4">
-                        {contextData ? (
-                            <ThesysRenderer schema={contextData} />
-                        ) : (
-                            <div className="text-gray-500 text-sm italic">Waiting for identifiable context...</div>
-                        )}
-                    </div>
-                </div>
+                {/* Right Sidebar: Chat Interface */}
+                <aside className="w-[400px] h-full bg-gray-900 border-l border-gray-800 flex flex-col shadow-2xl z-30">
+                    <ChatInterface />
+                </aside>
             </main>
 
             {/* Bottom: Controls */}

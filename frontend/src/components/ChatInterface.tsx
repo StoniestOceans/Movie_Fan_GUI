@@ -41,7 +41,7 @@ export default function ChatInterface() {
     };
 
     return (
-        <div className="flex flex-col h-screen bg-gray-900 text-white p-4">
+        <div className="flex flex-col h-full bg-gray-900/50 backdrop-blur-md text-white p-4">
             <header className="mb-4">
                 <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-600">
                     Movie Fan GenUI

@@ -1,5 +1,10 @@
 import os
 import asyncio
+from dotenv import load_dotenv
+
+# Load env variables from .env file (looked for in cwd or parents)
+load_dotenv("backend/.env")
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
@@ -26,6 +31,18 @@ class ChatResponse(BaseModel):
 async def lifespan(app: FastAPI):
     # Startup
     await db.connect()
+    
+    # Load Default Movie Context (Async safe here)
+    try:
+        print("🎬 Startup: Loading 'Avengers: Infinity War' context...")
+        agent = OpenSubtitlesAgent()
+        content = await agent.search_and_download("Avengers: Infinity War")
+        if content:
+            srt_manager.load_file(content)
+            print("✅ Default Movie Loaded: Avengers Infinity War")
+    except Exception as e:
+        print(f"⚠️ Startup Error: {e}")
+
     yield
     # Shutdown
     await db.close()
@@ -43,20 +60,23 @@ app.add_middleware(
 )
 
 # Initialize Agents
+from backend.app.scene_agent import SceneBufferAgent
 router = AgentRouter()
 wiki_agent = WikipediaAgent()
 fanart_agent = FanartAgent()
 x402 = X402Agent()
 nemo = NeMoAgent()
+scene_agent = SceneBufferAgent()
 
 from backend.app.srt_parser import SRTManager
 srt_manager = SRTManager()
-# Load sample file immediately for demo
-import os
-base_dir = os.path.dirname(os.path.abspath(__file__))
-# Assumes matrix.srt is in parent of app/ i.e. backend/matrix.srt
-srt_path = os.path.join(base_dir, "..", "matrix.srt")
-srt_manager.load_from_path(srt_path)
+# Load "Avengers: Infinity War" default data immediately for demo
+# We use the OpenSubtitlesMock to get the string content
+from backend.app.ingestion.opensubtitles_agent import OpenSubtitlesAgent
+import asyncio
+
+# Default movie loader moved to lifespan
+
 
 @app.get("/")
 def read_root():
@@ -116,7 +136,10 @@ async def chat_endpoint(request: ChatRequest):
     elif intent == "reasoning":
         # NeMo conversation
         response_text = await nemo.generate_response(request.query)
-        data_payload = {"context": "knowledge_graph_lookup"}
+        data_payload = {
+            "context": "knowledge_graph_lookup", 
+            "response_text": response_text
+        }
 
     else:
         response_text = "I'm not sure how to handle that yet."
@@ -141,8 +164,10 @@ async def sync_endpoint(request: SyncRequest):
     """
     sub = srt_manager.get_subtitle_at_time(request.timestamp_seconds)
     
+    scene_theme = scene_agent.get_current_theme()
+    
     if not sub:
-        return {"ui_schema": [], "subtitle": None}
+        return {"ui_schema": [], "subtitle": None, "logs": [], "theme": scene_theme}
         
     # LOGIC: Extract keywords from subtitle to simulate "Context"
     text = sub["text"]
@@ -150,6 +175,7 @@ async def sync_endpoint(request: SyncRequest):
     # Naive entity extraction for demo
     detected_entity = "Unknown"
     summary = "Context loading..."
+    context_type = "ingestion" # Default
     
     # GENERATIVE UI LOGIC:
     # We decide the "Type" of UI to render based on the context.
@@ -159,6 +185,16 @@ async def sync_endpoint(request: SyncRequest):
         summary = "Thomas A. Anderson, also known as Neo, is the protagonist."
         context_type = "ingestion" # Standard Card, but we'll try to find an image
         
+    elif "Thanos" in text:
+        detected_entity = "Thanos"
+        context_type = "mindmap"
+        summary = "The Mad Titan."
+        
+    elif "Thor" in text:
+        detected_entity = "Thor"
+        context_type = "ingestion"
+        summary = "God of Thunder."
+
     elif "Matrix" in text:
         detected_entity = "The Matrix"
         summary = "A simulated reality created by sentient machines to subdue the human population."
@@ -188,15 +224,26 @@ async def sync_endpoint(request: SyncRequest):
     
     if context_type == "mindmap":
         # Dynamic Knowledge Graph Construction
-        data_payload = {
-            "center": detected_entity,
-            "relations": [
-                {"relation": "Captain of", "label": "Nebuchadnezzar"},
-                {"relation": "Mentor to", "label": "Neo"},
-                {"relation": "Enemy of", "label": "Agents"},
-                {"relation": "Believes in", "label": "The One"}
-            ]
-        }
+        if detected_entity == "Morpheus":
+            data_payload = {
+                "center": detected_entity,
+                "relations": [
+                    {"relation": "Captain of", "label": "Nebuchadnezzar"},
+                    {"relation": "Mentor to", "label": "Neo"},
+                    {"relation": "Enemy of", "label": "Agents"},
+                    {"relation": "Believes in", "label": "The One"}
+                ]
+            }
+        elif detected_entity == "Thanos":
+             data_payload = {
+                "center": "Thanos",
+                "relations": [
+                    {"relation": "Wields", "label": "Infinity Gauntlet"},
+                    {"relation": "Seeks", "label": "Balance"},
+                    {"relation": "Enemy of", "label": "Avengers"},
+                    {"relation": "Daughter", "label": "Gamora"}
+                ]
+            }
     else:
         # Standard Card
         # In a real app, we'd query the DB for the Fanart we found earlier
@@ -204,6 +251,8 @@ async def sync_endpoint(request: SyncRequest):
         image_url = None
         if detected_entity == "Neo":
             image_url = "https://images.fanart.tv/fanart/the-matrix-523ce51b89944.jpg" 
+        elif detected_entity == "Thor":
+            image_url = "https://images.fanart.tv/fanart/avengers-infinity-war-5ac5e1657803e.jpg"
         elif detected_entity == "The Matrix":
             image_url = "https://images.fanart.tv/fanart/the-matrix-5979c6d66e762.jpg"
 
@@ -225,17 +274,23 @@ async def sync_endpoint(request: SyncRequest):
         f"[NLP] Entity Extraction: '{detected_entity}'",
     ]
     
+    # SCENE ANALYSIS
+    scene_agent.add_line(text)
+    scene_theme = await scene_agent.analyze_scene()
+    system_logs.append(f"[AGENT] Scene Theme: {scene_theme.upper()}")
+
     if context_type == "mindmap":
         system_logs.append(f"[GEN-UI] Trigger: Narrative Importance")
         system_logs.append(f"[GEN-UI] Rendering Knowledge Graph for {detected_entity}...")
     elif context_type == "ingestion" and detected_entity != "Unknown":
         system_logs.append(f"[DB] Querying Fanart.tv Collection...")
         system_logs.append(f"[GEN-UI] Injecting Asset: {data_payload.get('images', [''])[0] or 'None'}")
-
+ 
     return {
         "subtitle": sub,
         "ui_schema": ui_schema["ui_schema"],
-        "logs": system_logs
+        "logs": system_logs,
+        "theme": scene_theme
     }
 
 if __name__ == "__main__":

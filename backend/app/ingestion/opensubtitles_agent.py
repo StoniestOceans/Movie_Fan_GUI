@@ -27,7 +27,14 @@ class OpenSubtitlesAgent:
         # 1. Check if we have an API key
         if not self.api_key:
             print("⚠️ OpenSubtitlesAgent: No API Key found. Using Mock Mode.")
-            return await self._mock_search(query)
+            if "matrix" in query.lower():
+                print(f"[{self.agent_name}] Using MOCK SRT for 'The Matrix'")
+                return await self._mock_search("matrix")
+                
+            if "avengers" in query.lower() or "infinity" in query.lower():
+                print(f"[{self.agent_name}] Using MOCK SRT for 'Avengers: Infinity War'")
+                return await self._mock_search("avengers")
+            return None
 
         # 2. Real API Search (If Key Present)
         try:
@@ -80,8 +87,30 @@ class OpenSubtitlesAgent:
 
     async def _mock_search(self, query: str) -> Optional[str]:
         """
-        Fallback mock that returns local matrix.srt if query matches 'matrix'
+        Fallback mock that returns local matrix.srt or hardcoded avengers data
         """
+        if "avengers" in query.lower():
+            return """1
+00:00:10,000 --> 00:00:13,000
+Thor: BRING ME THANOS!
+
+2
+00:00:13,500 --> 00:00:17,000
+[Thunder crashes as Stormbreaker flies]
+
+3
+00:00:17,500 --> 00:00:22,000
+Thanos: You should have gone for the head.
+
+4
+00:00:22,500 --> 00:00:25,000
+[Thanos snaps his fingers]
+
+5
+00:00:25,500 --> 00:00:28,000
+Thor: No!
+"""
+
         if "matrix" in query.lower():
             print("🤖 Mock: Loading local matrix.srt")
             # Try to find the file we used before

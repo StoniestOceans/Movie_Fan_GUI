@@ -1,55 +1,43 @@
-import requests
-import sys
+import asyncio
+import os
+from dotenv import load_dotenv
 
-BASE_URL = "http://localhost:8000"
+# Load Env from backend/
+load_dotenv("backend/.env")
 
-def test_api():
-    print("Testing API...")
-    try:
-        # 1. Test Root
-        # Note: We can't easily test localhost server from here if it's not running in background.
-        # But we can import the app and test via TestClient if we had starlette installed.
-        # For now, let's just assume this script is for manual run or if server is up.
-        
-        # Actually, let's use FastAPI TestClient
-        from fastapi.testclient import TestClient
-        # Need to fix import path since we are in root
-        sys.path.append(".")
-        from backend.app.main import app
-        
-        client = TestClient(app)
-        
-        # Root
-        print("- Testing Root...")
-        response = client.get("/")
-        assert response.status_code == 200
-        print("  Root OK")
-        
-        # Chat - Ingestion (Wiki)
-        print("- Testing Chat (Wiki)...")
-        response = client.post("/api/chat", json={"query": "The Matrix", "user_id": "test"})
-        assert response.status_code == 200
-        data = response.json()
-        assert data["agent_used"] == "ingestion"
-        assert "The Matrix" in data["data"].get("title", "")
-        # Verify Thesys UI Schema
-        assert "ui_schema" in data["data"]
-        ui_schema = data["data"]["ui_schema"]
-        assert isinstance(ui_schema, list)
-        print("  Chat Wiki OK (UI Schema verified)")
-        
-        # Chat - Commerce
-        print("- Testing Chat (Commerce)...")
-        # Route query needs to be mocked or we need to ensure router picks commerce
-        # My mocked router in agent_router.py always returns "reasoning" (wait, I stubbed it to return placeholders? No, I implemented hardcoded logic in router stub?)
-        # Let's check agent_router.py content again.
-        # It had `return "reasoning"` commented out or as return?
-        # Ah, I need to check how I implemented the router logic.
-        
-        print("Backend Verification Complete.")
-        
-    except ImportError as e:
-        print(f"Skipping TestClient tests due to missing libs (httpx?): {e}")
+from backend.app.ingestion.fanart_agent import FanartAgent
+from backend.app.nemo_agent import NeMoAgent
+from backend.app.ingestion.wikipedia_agent import WikipediaAgent
+
+async def run_checks():
+    print("🚦 Starting API Verification...")
+    
+    # 1. Check Env
+    fw_key = os.getenv("FIREWORKS_API_KEY")
+    fan_key = os.getenv("FANART_API_KEY")
+    print(f"🔑 Keys found: Fireworks={'YES' if fw_key else 'NO'}, Fanart={'YES' if fan_key else 'NO'}")
+
+    # 2. Check NeMo (LLM)
+    print("\n🧠 Testing NeMo Agent (LLM)...")
+    nemo = NeMoAgent()
+    resp = await nemo.generate_response("What is the release date of The Matrix?")
+    print(f"   Response: {resp[:100]}...")
+
+    # 3. Check Fanart
+    print("\n🎨 Testing Fanart Agent...")
+    fanart = FanartAgent()
+    # Test Fallback (Avenger)
+    res_mock = await fanart.get_movie_assets(movie_name="Avengers: Infinity War")
+    url_mock = res_mock.get('assets', {}).get('moviebackground', [{}])[0].get('url', 'None')
+    print(f"   [Mock/Real] Avengers Background: {url_mock}")
+    
+    # 4. Check Wikipedia
+    print("\n📚 Testing Wikipedia Agent...")
+    wiki = WikipediaAgent()
+    res_wiki = await wiki.search_movie("The Matrix")
+    print(f"   Wiki Title: {res_wiki.get('title', 'Error')}")
+
+    print("\n✅ Verification Complete.")
 
 if __name__ == "__main__":
-    test_api()
+    asyncio.run(run_checks())

@@ -14,6 +14,14 @@ class WikipediaAgent:
         Searches Wikipedia, returns metadata, and PERSISTS it to the DB.
         """
         try:
+            # 1. Check Cache
+            from backend.app.cache_manager import cache
+            cache_key = f"wiki_search_{query.lower().strip()}"
+            cached_data = await cache.get(cache_key)
+            if cached_data:
+                print(f"⚡ Cache Hit for Wikipedia query: {query}")
+                return cached_data
+
             # Basic search (synchronous call)
             results = wikipedia.search(query)
             if not results:
@@ -60,13 +68,18 @@ class WikipediaAgent:
                     upsert=True
                 )
             
-            return {
+            result_payload = {
                 "title": page.title,
                 "summary": page.summary,
                 "url": page.url,
                 "saved_to_db": True,
                 "movie_id": movie_id
             }
+
+            # 2. Save to Cache
+            await cache.set(cache_key, result_payload)
+            
+            return result_payload
             
         except wikipedia.exceptions.DisambiguationError as e:
             return {"error": "Disambiguation", "options": e.options}
